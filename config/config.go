@@ -8,15 +8,24 @@ import (
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/cloudinary/cloudinary-go/v2"
 )
 
 var Client *mongo.Client
+var Cloudinary *cloudinary.Cloudinary
 
 func init() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
+	cld, err := cloudinary.NewFromURL(os.Getenv("CLOUDINARY_URL"))
+	if err != nil {
+		log.Fatalf("Failed to initialize Cloudinary, %v", err)
+	}
+	Cloudinary = cld
 }
 
 func ConnectDB() {

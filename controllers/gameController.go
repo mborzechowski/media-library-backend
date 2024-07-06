@@ -3,12 +3,14 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"log"
-	"net/http"
-
+	"fmt"
 	"game-catalog-backend/config"
 	"game-catalog-backend/models"
+	"log"
+	"net/http"
+	"strconv"
 
+	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -35,24 +37,72 @@ func GetGames(w http.ResponseWriter, r *http.Request) {
 
 // AddGame adds a new game to the database
 func AddGame(w http.ResponseWriter, r *http.Request) {
-	var game models.Game
-	json.NewDecoder(r.Body).Decode(&game)
+    var game models.Game
 
-	collection := config.Client.Database("gamecatalog").Collection("games")
-	result, err := collection.InsertOne(context.Background(), game)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+    // Parse the incoming request
+    err := r.ParseMultipartForm(10 << 20) // 10MB
+    if err != nil {
+        http.Error(w, "Unable to parse form data", http.StatusBadRequest)
+        return
+    }
 
-	// Extract the inserted ID and set it in the response
-	id := result.InsertedID.(primitive.ObjectID)
-	game.ID = id
+    log.Println("Form data parsed successfully")
 
-	log.Printf("Received game: %+v\n", game)
+    // Retrieve file
+    file, _, err := r.FormFile("image")
+    if err != nil {
+        log.Printf("Unable to read image from request: %v", err)
+        http.Error(w, "Unable to read image from request", http.StatusBadRequest)
+        return
+    }
+    defer file.Close()
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(game)
+    // Upload file to Cloudinary
+    uploadResult, err := config.Cloudinary.Upload.Upload(context.Background(), file, uploader.UploadParams{})
+    if err != nil {
+        log.Printf("Failed to upload image: %v", err)
+        http.Error(w, fmt.Sprintf("Failed to upload image: %v", err), http.StatusInternalServerError)
+        return
+    }
+
+   
+    // Decode other fields
+    game.Title = r.FormValue("title")
+    game.Genre = r.FormValue("genre")
+    game.Platform = r.FormValue("platform")
+    game.YearPublished, err = strconv.Atoi(r.FormValue("yearPublished"))
+    if err != nil {
+        log.Printf("Error parsing YearPublished: %v", err)
+    }
+    game.PhysicalDigital = r.FormValue("physicalDigital")
+    game.Publisher = r.FormValue("publisher")
+    game.Developer = r.FormValue("developer")
+    game.Completed, err = strconv.ParseBool(r.FormValue("completed"))
+    if err != nil {
+        log.Printf("Error parsing Completed: %v", err)
+    }
+    game.Rating, err = strconv.Atoi(r.FormValue("rating"))
+    if err != nil {
+        log.Printf("Error parsing Rating: %v", err)
+    }
+    game.Images = []string{uploadResult.SecureURL}
+
+    log.Printf("Game object populated: %+v\n", game)
+
+    collection := config.Client.Database("gamecatalog").Collection("games")
+    result, err := collection.InsertOne(context.Background(), game)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    id := result.InsertedID.(primitive.ObjectID)
+    game.ID = id
+
+    log.Printf("Game inserted into database with ID: %s\n", id.Hex())
+
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(game)
 }
 
 // Pobieranie pojedynczej gry
