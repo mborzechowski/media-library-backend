@@ -58,7 +58,7 @@ func AddGame(w http.ResponseWriter, r *http.Request) {
     defer file.Close()
 
     // Upload file to Cloudinary
-    uploadResult, err := config.Cloudinary.Upload.Upload(context.Background(), file, uploader.UploadParams{})
+    uploadResult, err := config.Cloudinary.Upload.Upload(context.Background(), file, uploader.UploadParams{Folder:"Media/Games"})
     if err != nil {
         log.Printf("Failed to upload image: %v", err)
         http.Error(w, fmt.Sprintf("Failed to upload image: %v", err), http.StatusInternalServerError)
